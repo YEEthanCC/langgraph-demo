@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import AzureOpenAIEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 from typing import TypedDict, List
 from langchain import hub
 from langchain_core.documents import Document
@@ -28,7 +28,6 @@ db = None
 embed_model = AzureOpenAIEmbeddings(model="text-embedding-3-small")
 
 if len(os.listdir('knowledge-base')) == 0:
-    print("database does not exist")
     loader = PyPDFLoader(file_path="data/新手包_瑞光總部攻略_20240311.pdf")
     docs = []
     docs = loader.load()
@@ -45,12 +44,11 @@ if len(os.listdir('knowledge-base')) == 0:
 
     # vector storage
     db = Chroma.from_documents(
-        all_splits, 
+        documents=all_splits, 
         embedding=embed_model,
         persist_directory="./knowledge-base"
     )
 else:
-    print("database already exist")
     db = Chroma(persist_directory="./knowledge-base", embedding_function=embed_model)
 
 
@@ -73,9 +71,7 @@ def get_input(state: State):
 def retrieve(state: State):
     print("--Retrieving Information--")
     question = state['question']
-    # retrieved_docs = vector_store.similarity_search(query=question,k=4)
-    retrieved_docs = db.as_retriever().get_relevant_documents(question)[0].page_content
-    print(retrieved_docs)
+    retrieved_docs = db.as_retriever().invoke(question)[0].page_content
     return {'context': retrieved_docs}
 
 def check_relevance(state: State):
