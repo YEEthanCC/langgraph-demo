@@ -1,3 +1,4 @@
 .env
 venv/
-.pdf
+data/
+knowledge-base/
