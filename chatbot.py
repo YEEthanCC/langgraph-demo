@@ -1,13 +1,15 @@
 import getpass
 import os
+import operator
 from dotenv import load_dotenv
+from langchain_openai import AzureChatOpenAI
 from langchain_openai import AzureOpenAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from typing import TypedDict, List
+from langchain_core.messages import AnyMessage, HumanMessage, AIMessage, SystemMessage
+from typing import TypedDict, List, Annotated
 from langchain_core.documents import Document
 from langgraph.graph import START, StateGraph
-from langchain_openai import AzureChatOpenAI
-
+from langgraph.checkpoint.memory import MemorySaver
 
 load_dotenv()
 
@@ -31,25 +33,23 @@ llm = AzureChatOpenAI(
 
 prompt = ChatPromptTemplate([
     ("system", "You are an intelligent, friendly, and helpful AI assistant."), 
-    MessagesPlaceholder("context"), 
-    ("user", "{question}")
+    MessagesPlaceholder("history"), 
+    ("user", "{msg}")
 ])
 
 
 class State(TypedDict):
-    question: str
-    context: List[Document]
-    answer: str
+    messages: Annotated[list, operator.add]
 
 def get_input(state: State):
-    question = input("Ask me anything: ")
-    return {'question': question, 'context': [], 'answer': ""}
+    msg = input("Ask me anything: ")
+    return {"messages": [HumanMessage(msg)]}
 
 def generate(state: State):
     print("--Generating Response--")
-    messages = prompt.invoke({'question': state['question'], 'context': state['context']})
-    response = llm.invoke(messages)
-    return {'answer': response}
+    message = prompt.invoke({'msg': state['messages'][-1].content, 'history': state['messages'][:-1]})
+    response = llm.invoke(message).content
+    return {'messages': [AIMessage(content=response)]}
 
         
 builder = StateGraph(State)
@@ -61,8 +61,10 @@ builder.add_edge(START, "get_input")
 builder.add_edge("get_input", "generate")
 builder.add_edge("generate", "get_input")
 
-graph = builder.compile()
+checkpointer = MemorySaver()
+graph = builder.compile(checkpointer=checkpointer)
+config = {"configurable": {"thread_id": "1"}}
 
-for event in graph.stream({'question': "", 'context': [], 'answer': ""}, stream_mode='values'):
-    if event.get('answer',''):
-        event['answer'].pretty_print()
+for event in graph.stream({"messages": []}, config, stream_mode='values'):
+    if len(event["messages"]) != 0:
+        event["messages"][-1].pretty_print()
