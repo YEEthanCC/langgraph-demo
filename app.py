@@ -8,9 +8,9 @@ from langchain_chroma import Chroma
 from typing import TypedDict, List
 from langchain import hub
 from langchain_core.documents import Document
-from langgraph.graph import START, END, StateGraph
-
+from langgraph.graph import START, StateGraph
 from langchain_openai import AzureChatOpenAI
+from langgraph.checkpoint.memory import MemorySaver
 
 load_dotenv()
 
@@ -111,8 +111,13 @@ builder.add_conditional_edges(source="retrieve", path=check_relevance)
 builder.add_edge("generate", "get_input")
 builder.add_edge("search", "generate")
 
-graph = builder.compile()
+config = {"configurable": {"thread_id": "1"}}
+memory = MemorySaver()
+graph = builder.compile(checkpointer=memory)
 
-for event in graph.stream({'question': '咖啡吧在哪裡?'},stream_mode='values'):
+for event in graph.stream({'question': '咖啡吧在哪裡?'}, config, stream_mode='values'):
     if event.get('answer',''):
+        print("history:")
+        print(graph.get_state_history(config))
+        print("answer: ")
         event['answer'].pretty_print()
